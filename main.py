@@ -2,8 +2,22 @@ import os
 import asyncio
 from telethon import TelegramClient, events
 from telethon.sessions import StringSession
+from http.server import HTTPServer, BaseHTTPRequestHandler
+import threading
 
-# Koyeb/Render-dən gələcək məlumatlar
+# Render-in "Port" xətası verməməsi üçün kiçik bir saxta server
+class HealthCheckHandler(BaseHTTPRequestHandler):
+    def do_GET(self):
+        self.send_response(200)
+        self.end_headers()
+        self.wfile.write(b"Bot is running")
+
+def run_health_check():
+    port = int(os.environ.get("PORT", 8080))
+    server = HTTPServer(('0.0.0.0', port), HealthCheckHandler)
+    server.serve_forever()
+
+# Bot Məlumatları
 API_ID = int(os.environ.get("API_ID"))
 API_HASH = os.environ.get("API_HASH")
 SESSION_STRING = os.environ.get("SESSION_STRING")
@@ -19,10 +33,7 @@ async def main():
             try:
                 parts = link.split('/')
                 msg_id = int(parts[-1])
-                if 'c/' in link:
-                    peer = int('-100' + parts[parts.index('c') + 1])
-                else:
-                    peer = parts[parts.index('t.me') + 1]
+                peer = int('-100' + parts[parts.index('c') + 1]) if 'c/' in link else parts[parts.index('t.me') + 1]
 
                 message = await client.get_messages(peer, ids=msg_id)
                 if message and message.media:
@@ -41,4 +52,9 @@ async def main():
     await client.run_until_disconnected()
 
 if __name__ == '__main__':
-    asyncio.run(main())
+    # Render üçün saxta serveri arxa planda başlat
+    threading.Thread(target=run_health_check, daemon=True).start()
+    # Botu başlat
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+    loop.run_until_complete(main())
